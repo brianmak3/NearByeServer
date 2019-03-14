@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+</head>
+<body style="padding:50px">
+	<div id="data">
+		
+	</div>
+	<input type="text" id="text" style="height:200px;width:300px"><br/>
+	<button onclick="sendText()" style="height:45px;width:150px;background-color: skyblue;margin-top: 10px">Send</button>
+</body>
+<script type="text/javascript">
+	var ws = new WebSocket('ws://192.168.1.102:8080');
+	$(document).ready(function(){
+	ws.onopen = (e)=>{
+		ws.send(JSON.stringify({
+              id:'+254786481885',
+              data:{
+              	action:'setUser'
+              }
+		}));
+		    ws.send(JSON.stringify({
+                data: { action:'updateReadAll',
+	                args: ['done-all', 'read'],
+	                friendId: '+254728936705',
+	                myId: '+254786481885'
+                }
+		    }));
+     }
+     ws.onmessage = (e)=>{
+     	var data = JSON.parse(e.data);
+     	 if(data.action == 'newMessage'){
+		    ws.send(JSON.stringify({
+                data: { action:'updateReadAll',
+	                args: ['done-all', 'read'],
+	                friendId: '+254728936705',
+                }
+		    }));
+
+     	}
+     	else if(data.action == 'lastSeen')
+     		$('#data').text(JSON.stringify(data));
+     	
+     }
+     ws.onconnect = (e)=>{
+     	
+
+     }
+     $('#text').focus(function(){
+     	sendLastseen('typing...')
+     }).blur(function(){
+     	sendLastseen('Online')
+     })
+  });
+	function sendLastseen(state){
+	 ws.send(JSON.stringify({
+        data: { action:'lastSeen',
+            from:'+254786481885',
+            to:'+254704251068',
+            state:state
+        }
+    }));
+	}
+	function sendText(){
+		var text = document.getElementById('text').value;
+		var now = Date.now(),
+             today = new Date();
+             td = today.toString(),
+             date = td.substr(0,16),
+             time = td.substr(16,5),
+		 datam = {
+			data:{
+			  action:'newChat',
+			  msg:{
+				  time: time,
+				  date:date,
+				  id:now,
+			      to: '+254704251068',
+			      from: '+254786481885',
+			      read:'time',
+			      text: text,
+			      media:  '',
+			      location: '', 
+			      friend: '+254704251068'
+			  }
+		  },
+		  id:'+254786481885'
+		}
+		ws.send(JSON.stringify(datam));
+		document.getElementById('text').value = '';
+	}
+</script>
+</html>
