@@ -22,17 +22,11 @@ const
     }
 
 });
- var upload = multer({ storage : storage, limits: { fieldSize: 10 * 1024 * 1024 }}).single('image');
-
-var  Users = require('./models/users'),
+ var upload = multer({ storage : storage, limits: { fieldSize: 10 * 1024 * 1024 }}).single('image'),
+  Users = require('./models/users'),
    DraftMessages = require('./models/messages');
-   //deliveredMessages = [],
-   //readMessages = [{from:'+254704251068', to:'+254719662122'}];
-// connect to the database
- //mongoose.connect('mongodb://nearby:nearby@127.0.0.1/nearBy');
+ mongoose.connect('mongodb://nearby:nearby@127.0.0.1/nearBy');
    //mongoose.connect('mongodb://127.0.0.1/nearBye',{ useNewUrlParser: true } );
-    mongoose.connect('mongodb://nearby:nearby@127.0.0.1/nearBy',{ useNewUrlParser: true });
-// basic setup
 const WebSocket = require('ws');
  
 const wss = new WebSocket.Server({
@@ -169,25 +163,13 @@ wss.on('connection', function(socket){
                 checkAndSendText(socket,a,a[0].to, a[0].from);
             })
           break;
-          case 'handleDrafts':
-          // updateSocketId(data.userId, socket.id);
-             DraftMessages.find({to: data.userId}, {_id:0, 'messages._id':0},function(err,msgs){
-                  if(err)
-                    throw err;
-                  else if(msgs.length > 0){
-                  socket.send(JSON.stringify({action: 'DraftsChats', datam:msgs}));
-                  DraftMessages.deleteMany({to: data.userId}, function(err){
-                   if(err)
-                     throw err;
-                 })
-                }
-
-              });
-           break;
+          case 'logOut':
+             console.log(data);
+          break;
            case 'newChat':
              var msg = [data.msg].map(function(item) {item.friend = item.from; return item; });;
               checkAndSendText(socket,msg, data.msg.to, data.msg.from);
-              console.log(data)
+              //console.log(data)
            break;
           case 'checkOnline':
            Users.findOne({'_id':data.friendId},{_id:1,state:1},function(err, user){
@@ -201,6 +183,11 @@ wss.on('connection', function(socket){
                 }
 
              })
+            sendReadStatus({
+              updateVal: 'read',
+              friend: data.myId,
+              from: data.friendId
+           })
           break;
           case 'removeProfile':
               Users.findOne({'_id': data.user}, {pic:1, _id:0}, function (err, userx) {
@@ -231,7 +218,7 @@ wss.on('connection', function(socket){
             })
            break;
            case 'updateReadAll':
-                    broadCast(JSON.stringify({action:'updateReadAll',datam:data}));
+                    sendReadStatus(data);
            break;
            case 'lastSeen':
                 broadCast(JSON.stringify(data));
@@ -240,7 +227,6 @@ wss.on('connection', function(socket){
 
     })
     socket.on('close',function(){
-
       updateSocketId(socket.userId ,socket, ''+Date.now());
     })
 
@@ -255,10 +241,26 @@ wss.on('connection', function(socket){
          })
       });
 });
+function getDrafts(userId, socket){
+   DraftMessages.find({to: userId}, {_id:0, 'messages._id':0},function(err,msgs){
+        if(err)
+          throw err;
+        else if(msgs.length > 0){
+        socket.send(JSON.stringify({action: 'DraftsChats', datam:msgs}));
+        DraftMessages.deleteMany({to: userId}, function(err){
+         if(err)
+           throw err;
+       })
+      }
+
+    });
+}
 function updateSocketId(userId,socket,status){
    if(status !== 'Online'){
     var date = new Date(parseInt(status));
     status = date.toString().substr(0,21);
+  }else{
+    getDrafts(userId, socket)
   }
   
    Users.updateOne({_id:userId},{$set:{ state:status}}, function(err, res){
@@ -295,10 +297,10 @@ function checkAndSendText(socket,message, to, from){
      else{
       var update;
        if(res.state == 'Online'){
-           update = ['time', 'done-all'];
+            update = 'done-all';
             broadCast(JSON.stringify({action: 'newMessage', datam:message}))
        }else{
-           update = ['time', 'checkmark'];
+           update =  'checkmark';
          DraftMessages.findOne({to: to,from:from},{messages:0},function(err, res){
             if(err)
                throw err;
@@ -320,16 +322,17 @@ function checkAndSendText(socket,message, to, from){
          })
        }
        //do a notification here.
-       socket.send(JSON.stringify({
-          action:'updateRead',
-          datam: {
-            ids: message.map((a)=>a.time),
-            args: update,
-            friend: to
-           }
-         }))
+       sendReadStatus({
+            updateVal: update,
+            friend: to,
+            from:from
+           })
+         
        }
    })
+}
+function sendReadStatus(data){
+            broadCast(JSON.stringify({action: 'updateRead', datam:data}))
 }
 
 function removeuser(id){
